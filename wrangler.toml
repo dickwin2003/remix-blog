@@ -4,11 +4,11 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "remix-blog"
-database_id = "bbffe795-885d-4560-9fc0-52a751cfdef6"
+database_id = "xxxx"
 preview_database_id = "DB" # Required for Pages local development
 
 [vars]
-TINYMCE_API_KEY = "cck3viji7fpoce7ve98u5txjapr27nsp717dtcb9g86s3fza"
+TINYMCE_API_KEY = "xxx"
 
 [build]
 command = "npm run build"
