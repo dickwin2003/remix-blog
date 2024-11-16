@@ -6,6 +6,8 @@ An example app that shows how to query [Cloudflare D1](https://developers.cloudf
 
 See the official D1 documentation's [Remix + D1 example](https://developers.cloudflare.com/d1/examples/d1-and-remix/) for code-based example of how to define a `LoaderFunction`.
 
+Deploy this website in cloudflare  as :https://remix-blog-ee4.pages.dev/
+
 ## License
 
 Copyright Cloudflare, Inc (2023). Apache-2.0 licensed. See the LICENSE file for details.
