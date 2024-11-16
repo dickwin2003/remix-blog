@@ -1,6 +1,12 @@
 [[d1_databases]]
 binding = "DB"
-database_name = "db-enam"
-database_id = "c89db32e-83f4-4e62-8cd7-7c8f97659029"
+database_name = "remix-blog"
+database_id = "bbffe795-885d-4560-9fc0-52a751cfdef6"
 preview_database_id = "DB" # Required for Pages local development
 
+[vars]
+TINYMCE_API_KEY = "cck3viji7fpoce7ve98u5txjapr27nsp717dtcb9g86s3fza"
+
+# Pages 配置
+name = "remix-blog"
+pages_build_output_dir = "public"

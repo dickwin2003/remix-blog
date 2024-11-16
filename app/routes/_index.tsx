@@ -1,106 +1,210 @@
-import type {
-  DataFunctionArgs,
-  LoaderArgs,
-  LoaderFunction,
-} from "@remix-run/cloudflare";
-import { json } from "@remix-run/cloudflare";
-import { Link, useLoaderData } from "@remix-run/react";
+import { json, type LoaderFunctionArgs } from "@remix-run/cloudflare";
+import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
+import Layout from "~/components/Layout";
 
-interface Env {
-  DB: D1Database;
+interface Category {
+  id: number;
+  name: string;
+  value: string;
+  post_count: number;
 }
 
-interface UserRow {
-  user_id: number;
-  email_address: string;
+interface Label {
+  id: number;
+  nickname: string;
+  label_name: string;
+  post_id: number;
+  post_count: number;
+}
+
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  views: number;
   created_at: number;
-  deleted: number;
-  settings: string;
+  class_name: string;
+  class_value: string;
 }
 
-const USER_QUERY = "SELECT * FROM users ORDER BY created_at DESC LIMIT 20;";
+interface LoaderData {
+  posts: Post[];
+  categories: Category[];
+  labels: Label[];
+  pagination: {
+    total: number;
+    totalPages: number;
+    currentPage: number;
+    pageSize: number;
+  };
+}
 
-// Infer the type our data based on the return type of our loader function.
-// Ref: https://jfranciscosousa.com/blog/typing-remix-loaders-with-confidence
-type LoaderData = Awaited<ReturnType<typeof loader>>;
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const env = context.env as { DB: D1Database };
+  const url = new URL(request.url);
+  const currentPage = parseInt(url.searchParams.get("page") || "1");
+  const pageSize = parseInt(url.searchParams.get("pageSize") || "5");
 
-export const loader = async ({ context, params }: LoaderArgs) => {
-  let env = context.env as Env;
-  return await env.DB.prepare(USER_QUERY).all();
-};
+  try {
+    // 获取文章总数
+    const totalResult = await env.DB.prepare(`
+      SELECT COUNT(*) as total FROM t_post
+    `).first<{ total: number }>();
+
+    const total = totalResult?.total || 0;
+    const totalPages = Math.ceil(total / pageSize);
+    const offset = (currentPage - 1) * pageSize;
+
+    // 获取文章列表
+    const posts = await env.DB.prepare(`
+      SELECT 
+        p.id,
+        p.title,
+        p.content,
+        p.views,
+        p.created_at,
+        c.name as class_name,
+        c.value as class_value
+      FROM t_post p
+      LEFT JOIN t_class c ON p.class_id = c.id
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(pageSize, offset).all<Post>();
+
+    // 获取所有分类
+    const categories = await env.DB.prepare(`
+      SELECT c.*, COUNT(p.id) as post_count 
+      FROM t_class c 
+      LEFT JOIN t_post p ON c.id = p.class_id 
+      GROUP BY c.id 
+      ORDER BY c.name
+    `).all<Category>();
+
+    // 获取所有标签
+    const labels = await env.DB.prepare(`
+      SELECT l.id, l.nickname, l.label_name, COUNT(DISTINCT l.post_id) as post_count
+      FROM t_label l
+      GROUP BY l.label_name
+      ORDER BY l.created_at DESC
+    `).all<Label>();
+
+    return json<LoaderData>({
+      posts: posts.results || [],
+      categories: categories.results || [],
+      labels: labels.results || [],
+      pagination: {
+        total,
+        totalPages,
+        currentPage,
+        pageSize,
+      },
+    });
+  } catch (error) {
+    console.error("Error loading data:", error);
+    throw new Response("加载数据失败", { status: 500 });
+  }
+}
 
 export default function Index() {
-  const { results, meta } = useLoaderData<LoaderData>();
+  const data = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+
   return (
-    <div className="container mx-auto">
-      <div className="flex flex-col py-8 justify-center items-center">
-        <h1 className="text-orange-500 font-extrabold text-4xl max-w-md">
-          Remix x Cloudflare D1
-        </h1>
-        <div className="py-4">
-          <h2 className="font-extrabold text-2xl py-4 text-blue-800">Docs</h2>
-          <ul className="list-disc leading-relaxed">
-            <li className="text-300 text-1xl underline">
-              <Link to="https://developers.cloudflare.com/d1/">
-                Learn more about D1
-              </Link>
-            </li>
-            <li className="text-300 text-1xl underline">
-              <Link to="https://developers.cloudflare.com/pages/framework-guides/deploy-a-remix-site/">
-                Deploy your own Remix site to Cloudflare Pages
-              </Link>
-            </li>
-            <li className="text-300 text-1xl underline">
-              <Link to="https://developers.cloudflare.com/d1/examples/d1-and-remix/">
-                Example: Remix loader function querying D1
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div className="inline-block max-w-full overflow-scroll px-4 justify-center items-center">
-          <h2 className="font-extrabold text-2xl py-4 text-blue-800">
-            Query Results
-          </h2>
-          <pre className="text-mono text-sm my-1">Executed: {USER_QUERY}</pre>
-          <div className="py-2 md-px-8 whitespace-nowrap">
-            <table className="rounded-xl border-collapse text-sm md:text-md font-light">
-              <thead className="border-b dark:border-neutral-500 bg-slate-200">
-                <tr className="font-bold text-left break-words">
-                  <th scope="col" className="px-6 py-4">
-                    User ID
-                  </th>
-                  <th scope="col" className="px-6 py-4">
-                    Email Address
-                  </th>
-                  <th scope="col" className="px-6 py-4">
-                    Created at
-                  </th>
-                  <th scope="col" className="px-6 py-4">
-                    Deleted?
-                  </th>
-                  <th scope="col" className="px-6 py-4">
-                    Settings
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((row, idx) => (
-                  <tr key={idx} className="border-b dark:border-neutral-500">
-                    {Object.entries(row).map(([key, value]) => (
-                      <td key={key} className="whitespace-nowrap px-6 py-4">
-                        {value}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs py-4">
-            Query runtime: {meta.duration.toPrecision(2)} ms
-          </p>
-        </div>
+    <Layout data={data}>
+      <div className="space-y-6">
+        {data.posts.map((post) => (
+          <article key={post.id} className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="p-6">
+              <h2 className="text-2xl font-bold mb-2">
+                <Link to={`/post/${post.id}`} className="text-gray-900 hover:text-blue-600">
+                  {post.title}
+                </Link>
+              </h2>
+              <div className="text-sm text-gray-500 mb-4">
+                <Link to={`/category/${post.class_value}`} className="hover:text-blue-600">
+                  {post.class_name || '未分类'}
+                </Link>
+                <span className="mx-2">·</span>
+                <span>{new Date(post.created_at * 1000).toLocaleDateString()}</span>
+                <span className="mx-2">·</span>
+                <span>{post.views} 次阅读</span>
+              </div>
+              <p 
+                className="text-gray-600 line-clamp-3"
+                dangerouslySetInnerHTML={{ __html: post.content }}
+              />
+              <div className="mt-4">
+                <Link
+                  to={`/post/${post.id}`}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  阅读全文 →
+                </Link>
+              </div>
+            </div>
+          </article>
+        ))}
+
+        {/* Pagination */}
+        {data.pagination.totalPages > 1 && (
+          <nav className="flex justify-center mt-8">
+            <ul className="flex space-x-2">
+              {data.pagination.currentPage > 1 && (
+                <li>
+                  <Link
+                    to={`?page=${data.pagination.currentPage - 1}`}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    上一页
+                  </Link>
+                </li>
+              )}
+              
+              {Array.from({ length: data.pagination.totalPages }, (_, i) => i + 1)
+                .filter(page => {
+                  const current = data.pagination.currentPage;
+                  return page === 1 || 
+                         page === data.pagination.totalPages || 
+                         Math.abs(page - current) <= 2;
+                })
+                .map((page, i, arr) => {
+                  if (i > 0 && arr[i - 1] !== page - 1) {
+                    return (
+                      <li key={`ellipsis-${page}`}>
+                        <span className="px-3 py-2">...</span>
+                      </li>
+                    );
+                  }
+                  return (
+                    <li key={page}>
+                      <Link
+                        to={`?page=${page}`}
+                        className={`px-3 py-2 text-sm font-medium rounded-md ${
+                          page === data.pagination.currentPage
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 bg-white border border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {page}
+                      </Link>
+                    </li>
+                  );
+                })}
+
+              {data.pagination.currentPage < data.pagination.totalPages && (
+                <li>
+                  <Link
+                    to={`?page=${data.pagination.currentPage + 1}`}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    下一页
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </nav>
+        )}
       </div>
-    </div>
+    </Layout>
   );
 }
